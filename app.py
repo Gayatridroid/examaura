@@ -1,29 +1,32 @@
 from flask import Flask, render_template_string, request, redirect
-from flask_ngrok import run_with_ngrok
 import sqlite3
 from datetime import datetime
+import os
 
 app = Flask(__name__)
-run_with_ngrok(app)
 
-# ---------------- DATABASE ---------------- #
+DATABASE = "examaura.db"
+
+# -------- DATABASE INIT -------- #
 def init_db():
-    conn = sqlite3.connect("examaura.db")
+    conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS posts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    category TEXT,
-                    title TEXT,
-                    content TEXT,
-                    urgent INTEGER,
-                    created_at TEXT
-                )""")
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS posts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            category TEXT,
+            title TEXT,
+            content TEXT,
+            urgent INTEGER,
+            created_at TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
 init_db()
 
-# ---------------- TEMPLATE ---------------- #
+# -------- TEMPLATE -------- #
 template = """
 <!DOCTYPE html>
 <html>
@@ -76,13 +79,13 @@ body{
     border-radius:8px;
     font-size:12px;
 }
-.search{
-    text-align:center;
-    margin:20px;
+form{
+    width:60%;
+    margin:auto;
 }
 input, textarea, select{
-    padding:8px;
     width:100%;
+    padding:8px;
     margin-top:5px;
 }
 button{
@@ -117,24 +120,17 @@ footer{
 </div>
 
 <div class="hero">
-    <h1>Where Preparation Meets Power</h1>
-</div>
-
-<div class="search">
-<form method="get" action="/search">
-<input type="text" name="q" placeholder="Search exams, bharti, notes...">
-<button type="submit">Search</button>
-</form>
+<h1>Where Preparation Meets Power</h1>
 </div>
 
 {% for post in posts %}
 <div class="card">
-    {% if post[4] == 1 %}
-        <span class="badge">URGENT</span>
-    {% endif %}
-    <h2>{{post[2]}}</h2>
-    <p>{{post[3]}}</p>
-    <small>Category: {{post[1]}} | {{post[5]}}</small>
+{% if post[4] == 1 %}
+<span class="badge">URGENT</span>
+{% endif %}
+<h2>{{post[2]}}</h2>
+<p>{{post[3]}}</p>
+<small>Category: {{post[1]}} | {{post[5]}}</small>
 </div>
 {% endfor %}
 
@@ -146,11 +142,11 @@ Examaura © 2026 | Built by Gayuu
 </html>
 """
 
-# ---------------- ROUTES ---------------- #
+# -------- ROUTES -------- #
 
 @app.route('/')
 def home():
-    conn = sqlite3.connect("examaura.db")
+    conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute("SELECT * FROM posts ORDER BY id DESC")
     posts = c.fetchall()
@@ -159,20 +155,9 @@ def home():
 
 @app.route('/section/<category>')
 def section(category):
-    conn = sqlite3.connect("examaura.db")
+    conn = sqlite3.connect(DATABASE)
     c = conn.cursor()
     c.execute("SELECT * FROM posts WHERE category=? ORDER BY id DESC", (category,))
-    posts = c.fetchall()
-    conn.close()
-    return render_template_string(template, posts=posts)
-
-@app.route('/search')
-def search():
-    query = request.args.get('q')
-    conn = sqlite3.connect("examaura.db")
-    c = conn.cursor()
-    c.execute("SELECT * FROM posts WHERE title LIKE ? OR content LIKE ?", 
-              ('%'+query+'%', '%'+query+'%'))
     posts = c.fetchall()
     conn.close()
     return render_template_string(template, posts=posts)
@@ -186,16 +171,18 @@ def add():
         urgent = 1 if request.form.get('urgent') == 'on' else 0
         created_at = datetime.now().strftime("%d %b %Y")
 
-        conn = sqlite3.connect("examaura.db")
+        conn = sqlite3.connect(DATABASE)
         c = conn.cursor()
-        c.execute("INSERT INTO posts (category,title,content,urgent,created_at) VALUES (?,?,?,?,?)",
-                  (category,title,content,urgent,created_at))
+        c.execute(
+            "INSERT INTO posts (category,title,content,urgent,created_at) VALUES (?,?,?,?,?)",
+            (category,title,content,urgent,created_at)
+        )
         conn.commit()
         conn.close()
         return redirect('/')
 
     return """
-    <h2>Add Content - Examaura Admin</h2>
+    <h2 style='text-align:center;'>Add Content - Examaura Admin</h2>
     <form method='post'>
     Category:
     <select name='category'>
@@ -204,14 +191,22 @@ def add():
         <option>SSC</option>
         <option>Bharti</option>
     </select><br><br>
+
     Title:<br>
     <input type='text' name='title'><br><br>
+
     Content:<br>
     <textarea name='content'></textarea><br><br>
+
     Mark as Urgent:
     <input type='checkbox' name='urgent'><br><br>
+
     <button type='submit'>Publish</button>
     </form>
     """
 
-app.run()
+# IMPORTANT FOR RENDER
+port = int(os.environ.get("PORT", 5000))
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=port)
